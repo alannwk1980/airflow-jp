@@ -52,8 +52,11 @@ def buscar_dividas_consorcio():
     )
     response.raise_for_status()
 
-    logger.info("Resposta recebida. Parseando XML...")
-    logger.debug("XML bruto (primeiros 3000 chars):\n%s", response.text[:3000])
+    logger.info("Resposta recebida. Status: %s | Tamanho: %d bytes", response.status_code, len(response.content))
+    logger.info("XML bruto (primeiros 3000 chars):\n%s", response.text[:3000] if response.text else "(vazio)")
+
+    if not response.content or not response.text.strip():
+        raise ValueError(f"API retornou resposta vazia. Status: {response.status_code} | Headers: {dict(response.headers)}")
 
     root = ET.fromstring(response.content)
 
