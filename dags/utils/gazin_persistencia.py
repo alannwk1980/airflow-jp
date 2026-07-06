@@ -103,10 +103,9 @@ def _get_conn():
 def criar_tabela():
     with _get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("DROP TABLE IF EXISTS public.dividas_consorcio")
             cur.execute(DDL_TABELA)
         conn.commit()
-    logger.info("Tabela dividas_consorcio recriada com estrutura atualizada.")
+    logger.info("Tabela dividas_consorcio verificada/criada.")
 
 
 def carregar_dividas(registros: list[dict]):
