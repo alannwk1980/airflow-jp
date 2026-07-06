@@ -40,10 +40,10 @@ def buscar_dividas_consorcio():
     headers = {
         'Content-Type': 'text/xml; charset=utf-8',
         'Authorization': f'Bearer {token}',
-        'SOAPAction': 'cargaConsultaDivida',
+        'SOAPAction': '"http://api-cobradoras.gazin.com.br/malta/cargaConsultaDivida"',
     }
 
-    logger.info("Chamando API SOAP Gazin: %s", url)
+    logger.info("Chamando API SOAP Gazin: %s | Headers: %s", url, headers)
     response = requests.post(
         url,
         data=SOAP_PAYLOAD.encode('utf-8'),
