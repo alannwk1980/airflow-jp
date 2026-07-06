@@ -1,0 +1,25 @@
+# Credenciais - NUNCA versionar
+.env
+dags/.env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# dbt - arquivos gerados automaticamente
+dbt/cobra_etl/target/
+dbt/cobra_etl/logs/
+dbt/logs/
+dbt/dbt_run.log
+dbt/watcher.pid
+dbt/cobra_etl/models/staging/*.sql_old
+dbt/cobra_etl/.gitignore
+
+# Airflow logs e dados
+logs/
+data/
+
+# Arquivos temporários
+*.log
+*.log.1
