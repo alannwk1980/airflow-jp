@@ -22,115 +22,114 @@ SOAP_PAYLOAD = """<?xml version="1.0" encoding="utf-8"?>
   </SOAP-ENV:Body>
 </SOAP-ENV:Envelope>"""
 
+NS = {
+    'soap': 'http://schemas.xmlsoap.org/soap/envelope/',
+    'ns1':  'http://api-cobradoras.gazin.com.br/malta',
+}
 
-def _get_text(element, tag):
-    """Retorna o texto de um subelemento ou None se ausente."""
-    child = element.find(tag)
+
+def _txt(el, tag):
+    child = el.find(tag)
     return child.text.strip() if child is not None and child.text else None
 
 
 def buscar_dividas_consorcio():
-    """
-    Chama a API SOAP da Gazin e retorna lista de dicts com os dados das cotas.
-    O XML de resposta pode precisar de ajuste de tags conforme retorno real da API.
-    """
-    url = os.environ['GAZIN_API_URL']
+    url   = os.environ['GAZIN_API_URL']
     token = os.environ['GAZIN_API_TOKEN']
 
     headers = {
         'Content-Type': 'text/xml; charset=utf-8',
         'Authorization': f'Bearer {token}',
-        'SOAPAction': '"http://api-cobradoras.gazin.com.br/malta/cargaConsultaDivida"',
     }
 
-    logger.info("Chamando API SOAP Gazin: %s | Headers: %s", url, headers)
-    response = requests.post(
-        url,
-        data=SOAP_PAYLOAD.encode('utf-8'),
-        headers=headers,
-        timeout=120,
-    )
+    logger.info("Chamando API SOAP Gazin: %s", url)
+    response = requests.post(url, data=SOAP_PAYLOAD.encode('utf-8'), headers=headers, timeout=300)
     response.raise_for_status()
 
-    logger.info("Resposta recebida. Status: %s | Tamanho: %d bytes", response.status_code, len(response.content))
-    logger.info("XML bruto (primeiros 3000 chars):\n%s", response.text[:3000] if response.text else "(vazio)")
+    logger.info("Status: %s | Tamanho: %d bytes", response.status_code, len(response.content))
 
     if not response.content or not response.text.strip():
-        raise ValueError(f"API retornou resposta vazia. Status: {response.status_code} | Headers: {dict(response.headers)}")
+        raise ValueError(f"API retornou resposta vazia. Headers: {dict(response.headers)}")
 
-    root = ET.fromstring(response.content)
+    root     = ET.fromstring(response.content)
+    body     = root.find('soap:Body', NS)
+    resp_el  = body.find('ns1:cargaConsultaDividaResponse', NS)
+    return_el = resp_el.find('return')
 
-    # Loga a estrutura de tags do Body para facilitar diagnóstico na primeira execução
-    body_raw = root.find('.//{http://schemas.xmlsoap.org/soap/envelope/}Body')
-    if body_raw is not None:
-        def _log_tree(el, depth=0):
-            logger.info("%s<%s>", "  " * depth, el.tag.split('}')[-1])
-            for child in list(el)[:5]:  # máx 5 filhos por nível para não poluir o log
-                _log_tree(child, depth + 1)
-        logger.info("--- Estrutura do Body SOAP (primeiros níveis) ---")
-        _log_tree(body_raw)
-        logger.info("--- Fim da estrutura ---")
-
-    # Navega pelo envelope SOAP até os registros de cota
-    # ATENÇÃO: ajustar os caminhos de tag conforme a resposta real da API
-    ns = {
-        'soap': 'http://schemas.xmlsoap.org/soap/envelope/',
-        'ns1': 'http://api-cobradoras.gazin.com.br/malta',
-    }
-    body = root.find('soap:Body', ns)
-    response_el = body[0] if body is not None and len(body) > 0 else None
-
-    # Tenta localizar os elementos de cota em caminhos comuns de resposta SOAP
-    cotas = []
-    if response_el is not None:
-        # Tenta: <return><cotas><cota> ou <cotas><cota> direto
-        for candidate in ['./cotas/cota', './return/cotas/cota', './cota', './return/cota']:
-            cotas = response_el.findall(candidate)
-            if cotas:
-                logger.info("Encontradas %d cotas via path '%s'", len(cotas), candidate)
-                break
-
-    if not cotas:
-        logger.warning("Nenhuma cota encontrada no XML. Verifique o path de tags da resposta.")
-        return []
+    items = return_el.findall('item')
+    logger.info("Total de clientes (items) recebidos: %d", len(items))
 
     registros = []
-    for cota in cotas:
-        registro = {
-            'codigo_grupo':        _get_text(cota, 'CODIGO_GRUPO'),
-            'codigo_cota':         _get_text(cota, 'CODIGO_COTA'),
-            'numero_contrato':     _get_text(cota, 'NUMERO_CONTRATO'),
-            'vendedor':            _get_text(cota, 'VENDEDOR'),
-            'cpf_vendedor':        _get_text(cota, 'CPF_VENDEDOR'),
-            'codigo_equipe':       _get_text(cota, 'CODIGO_EQUIPE'),
-            'equipe_venda':        _get_text(cota, 'EQUIPEVENDA'),
-            'valor_credito':       _get_text(cota, 'VALORCREDITO') or _get_text(cota, 'VALOR_CREDITO'),
-            'valor_bem_entregue':  _get_text(cota, 'VALOR_BEM_ENTREGUE'),
-            'plano_cota':          _get_text(cota, 'PLANO_COTA'),
-            'prazo_grupo':         _get_text(cota, 'PRAZO_GRUPO'),
-            'primeira_assembleia': _get_text(cota, 'PRIMEIRA_ASSEMBLEIA'),
-            'ultima_assembleia':   _get_text(cota, 'ULTIMA_ASSEMBLEIA'),
-            'numero_parcela':      _get_text(cota, 'NUMERO_PARCELA'),
-            'data_vencimento':     _get_text(cota, 'DATA_VENCIMENTO'),
-            'valor_parcela':       _get_text(cota, 'VALOR_PARCELA'),
-            'valor_juros':         _get_text(cota, 'VALOR_JUROS'),
-            'valor_multa':         _get_text(cota, 'VALOR_MULTA'),
-            'parcelas_atraso':     _get_text(cota, 'PARCELAS_ATRASO'),
-            'codigo_situacao':     _get_text(cota, 'CODIGO_SITUACAO'),
-            'fase_processo':       _get_text(cota, 'FASE_PROCESSO'),
-            'tipo_contemplacao':   _get_text(cota, 'TIPO_CONTEMPLACAO'),
-            'data_contemplacao':   _get_text(cota, 'DATA_CONTEMPLACAO'),
-            'data_adesao':         _get_text(cota, 'DATA_ADESAO'),
-            'debito_automatico':   _get_text(cota, 'DEBITOAUTOMATICO'),
-            'bloqueia_cobranca':   _get_text(cota, 'BLOQUEIA_COBRANCA'),
-            'percentual_pago':     _get_text(cota, 'PERCENTUAL_PAGO'),
-            'valor_quitacao':      _get_text(cota, 'VALOR_QUITACAO'),
-            'codigo_filial_venda': _get_text(cota, 'CODIGO_FILIAL_VENDA'),
-            'nome_filial_venda':   _get_text(cota, 'NOME_FILIAL_VENDA'),
-            'ddd':                 _get_text(cota, 'DDD'),
-            'numero_telefone':     _get_text(cota, 'NUMERO'),
+    for item in items:
+        # Campos do cliente — repetidos em cada linha de cota
+        cliente = {
+            'cgc_cpf_cliente':    _txt(item, 'CGC_CPF_CLIENTE'),
+            'nome':               _txt(item, 'NOME'),
+            'data_nascimento':    _txt(item, 'DATANASCIMENTO'),
+            'endereco_res':       _txt(item, 'CLIENT_ENDERECO'),
+            'bairro_res':         _txt(item, 'CLIENT_BAIRRO'),
+            'cidade_res':         _txt(item, 'CIDADE_NOME_RES'),
+            'estado_res':         _txt(item, 'ESTADO_RES'),
+            'cep':                _txt(item, 'CEP'),
+            'endereco_com':       _txt(item, 'CLIENT_ENDERECO_COMERCIAL'),
+            'bairro_com':         _txt(item, 'CLIENT_BAIRRO_COMERCIAL'),
+            'cidade_com':         _txt(item, 'CIDADE_NOME_COM'),
+            'estado_com':         _txt(item, 'ESTADO_COM'),
+            'ddd_residencial':    _txt(item, 'CLIENT_DDD_RESIDENCIAL'),
+            'fone_residencial':   _txt(item, 'FONE_FAX'),
+            'ddd_comercial':      _txt(item, 'DDD_COMERCIAL'),
+            'fone_comercial':     _txt(item, 'FONE_FAX_COMERCIAL'),
+            'ddd_outro':          _txt(item, 'DDD_OUTRO'),
+            'fone_outro':         _txt(item, 'FONE_FAX_OUTRO'),
+            'ddd_celular':        _txt(item, 'DDD_CELULAR'),
+            'celular':            _txt(item, 'CELULAR'),
+            'fone_2':             _txt(item, 'FONE_FAX_2'),
+            'email':              _txt(item, 'E_MAIL'),
+            'cargo':              _txt(item, 'CARGO'),
+            'salario':            _txt(item, 'SALARIO'),
+            'classificacao':      _txt(item, 'CLASSIFICACAO'),
         }
-        registros.append(registro)
 
-    logger.info("Total de registros extraídos: %d", len(registros))
+        cotas_el = item.find('cotas')
+        if cotas_el is None:
+            continue
+
+        cota_els = cotas_el.findall('cota')
+        for cota in cota_els:
+            registro = {
+                **cliente,
+                'codigo_grupo':        _txt(cota, 'CODIGO_GRUPO'),
+                'codigo_cota':         _txt(cota, 'CODIGO_COTA'),
+                'numero_contrato':     _txt(cota, 'NUMERO_CONTRATO'),
+                'codigo_equipe':       _txt(cota, 'CODIGO_EQUIPE'),
+                'vendedor':            _txt(cota, 'VENDEDOR'),
+                'cpf_vendedor':        _txt(cota, 'CPF_VENDEDOR'),
+                'filial':              _txt(cota, 'FILIAL'),
+                'valor_credito':       _txt(cota, 'VALORCREDITO') or _txt(cota, 'VALOR_CREDITO'),
+                'plano_cota':          _txt(cota, 'PLANO_COTA'),
+                'primeira_assembleia': _txt(cota, 'PRIMEIRA_ASSEMBLEIA'),
+                'prazo_grupo':         _txt(cota, 'PRAZO_GRUPO'),
+                'valor_bem_entregue':  _txt(cota, 'VALOR_BEM_ENTREGUE'),
+                'ultima_assembleia':   _txt(cota, 'ULTIMA_ASSEMBLEIA'),
+                'numero_parcela':      _txt(cota, 'NUMERO_PARCELA'),
+                'data_vencimento':     _txt(cota, 'DATA_VENCIMENTO'),
+                'valor_parcela':       _txt(cota, 'VALOR_PARCELA'),
+                'valor_juros':         _txt(cota, 'VALOR_JUROS'),
+                'valor_multa':         _txt(cota, 'VALOR_MULTA'),
+                'parcelas_atraso':     _txt(cota, 'PARCELAS_ATRASO'),
+                'codigo_situacao':     _txt(cota, 'CODIGO_SITUACAO'),
+                'fase_processo':       _txt(cota, 'FASE_PROCESSO'),
+                'tipo_contemplacao':   _txt(cota, 'TIPO_CONTEMPLACAO'),
+                'data_contemplacao':   _txt(cota, 'DATA_CONTEMPLACAO'),
+                'data_adesao':         _txt(cota, 'DATA_ADESAO'),
+                'debito_automatico':   _txt(cota, 'DEBITOAUTOMATICO'),
+                'bloqueia_cobranca':   _txt(cota, 'BLOQUEIA_COBRANCA'),
+                'percentual_pago':     _txt(cota, 'PERCENTUAL_PAGO'),
+                'valor_quitacao':      _txt(cota, 'VALOR_QUITACAO'),
+                'codigo_filial_venda': _txt(cota, 'CODIGO_FILIAL_VENDA'),
+                'nome_filial_venda':   _txt(cota, 'NOME_FILIAL_VENDA'),
+            }
+            registros.append(registro)
+
+    logger.info("Total de cotas extraídas: %d", len(registros))
     return registros
