@@ -16,7 +16,7 @@ with DAG(
     description='Extrai dívidas de consórcio da API SOAP Gazin e carrega no PostgreSQL RDS',
     default_args=default_args,
     schedule_interval='0 7 * * *',  # 04:00 horário de Brasília (UTC-3)
-    start_date=datetime(2026, 7, 7),
+    start_date=datetime(2026, 1, 1),
     catchup=False,
     max_active_runs=1,
     tags=['gazin', 'consorcio', 'etl'],
