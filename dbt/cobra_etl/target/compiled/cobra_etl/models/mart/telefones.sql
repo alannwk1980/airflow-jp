@@ -1,0 +1,30 @@
+
+with celulares as (
+    select
+        cgc_cpf                             as cpf_cnpj,
+        2                                   as id_tipo_telefone,
+        trim(celular)                       as telefone,
+        coalesce(whatsapp, false)           as whatsapp,
+        null::boolean                       as blacklist,
+        null::integer                       as ddd,
+        dt_carga                            as data_atualizacao
+    from "gestor_magazine"."cobra_staging"."stg_cadastro"
+    where celular is not null
+      and trim(celular) != ''
+),
+fixos as (
+    select
+        cgc_cpf                             as cpf_cnpj,
+        1                                   as id_tipo_telefone,
+        trim(telefone_fixo)                 as telefone,
+        false                               as whatsapp,
+        null::boolean                       as blacklist,
+        null::integer                       as ddd,
+        dt_carga                            as data_atualizacao
+    from "gestor_magazine"."cobra_staging"."stg_cadastro"
+    where telefone_fixo is not null
+      and trim(telefone_fixo) != ''
+)
+select * from celulares
+union all
+select * from fixos
